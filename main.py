@@ -2,6 +2,7 @@ import argparse
 import urllib.request
 from pathlib import Path
 from pprint import pprint
+import math
 
 import cv2
 from cv2.typing import *
@@ -61,11 +62,14 @@ def draw_landmarks(frame, hand_landmarks):
     for point in points:
         cv2.circle(frame, point, 4, (0, 0, 255), -1)
 
-def determine_chord(hand_world_landmarks):#, handedness, hand_connections):
+def determine_chord(hand_landmarks, hand_world_landmarks, frame):#, handedness, hand_connections):
     #pprint(result)
     #pass
     # Right hand controls the chord being played
 
+    def s(a, b): return math.sqrt(pow((a.x - b.x), 2) + pow((a.y - b.y), 2))
+
+    height, width = frame.shape[:2]
 
     I_EXTENDED = 0.045
     M_EXTENDED = 0.045
@@ -75,92 +79,28 @@ def determine_chord(hand_world_landmarks):#, handedness, hand_connections):
     M_X_EXTENDED = 0.0085
     M_Y_EXTENDED = 0.0085
 
-    t_x = hand_world_landmarks[4].x
-    t_y = hand_world_landmarks[4].y
-    t_m_x = hand_world_landmarks[3].x
-    t_m_y = hand_world_landmarks[3].y
-    t_b = hand_world_landmarks[2].y
+    # Use image-space landmarks for the rendered circle so it appears at the palm center on screen.
+    WRIST = hand_landmarks[0]
+    T_B = hand_landmarks[1]
+    T_T = hand_landmarks[4]
+    I_B = hand_landmarks[5]
+    I_T = hand_landmarks[8]
+    M_B = hand_landmarks[9]
+    M_T = hand_landmarks[12]
+    R_B = hand_landmarks[13]
+    R_T = hand_landmarks[16]
+    P_B = hand_landmarks[17]
+    P_T = hand_landmarks[20]
 
-    i_x = hand_world_landmarks[8].x
-    i_y = hand_world_landmarks[8].y
-    i_m_x = hand_world_landmarks[6].x
-    i_m_y = hand_world_landmarks[6].y
-    i_b = hand_world_landmarks[5].y
+    center_x = int((WRIST.x + T_B.x + I_B.x + M_B.x + R_B.x + P_B.x) / 6 * width)
+    center_y = int((WRIST.y + T_B.y + I_B.y + M_B.y + R_B.y + P_B.y) / 6 * height)
 
-    m_x = hand_world_landmarks[12].x
-    m_y = hand_world_landmarks[12].y
-    m_m_x = hand_world_landmarks[10].x
-    m_m_y = hand_world_landmarks[10].y
-    m_b = hand_world_landmarks[9].y
-    r_x = hand_world_landmarks[16].x
-    r_y = hand_world_landmarks[16].y
-    r_m_x = hand_world_landmarks[14].x
-    r_m_y = hand_world_landmarks[14].y
-    r_b = hand_world_landmarks[13].y
-    p_x = hand_world_landmarks[20].x
-    p_y = hand_world_landmarks[20].y
-    p_m_x = hand_world_landmarks[18].x
-    p_m_y = hand_world_landmarks[18].y
-    p_b = hand_world_landmarks[17].y
+    # Draw a circle there so it is definitely visible in the current frame.
+    cv2.circle(frame, (center_x, center_y), 18, (255, 0, 0), 2)
+    cv2.circle(frame, (center_x, center_y), 5, (255, 0, 0), -1)
 
-    # If landmark 8 (tip of index) is sufficiently far from the palm, we display text saying so
-    #print(hand_world_landmarks[8].y)
-    i = (
-        (abs(i_b - i_x) > I_EXTENDED or abs(i_b - i_y) > I_EXTENDED)
-        and (abs(i_b - i_m_x) > M_X_EXTENDED
-             or abs(i_b - i_m_y) > M_Y_EXTENDED)
-    )
-    m = (
-        (abs(m_b - m_x) > M_EXTENDED or abs(m_b - m_y) > M_EXTENDED)
-        and (abs(m_b - m_m_x) > M_X_EXTENDED
-             or abs(m_b - m_m_y) > M_Y_EXTENDED)
-    )
-    r = (
-        (abs(r_b - r_x) > R_EXTENDED or abs(r_b - r_y) > R_EXTENDED)
-        and (abs(r_b - r_m_x) > M_X_EXTENDED
-             or abs(r_b - r_m_y) > M_Y_EXTENDED)
-    )
-    p = (
-        (abs(p_b - p_x) > P_EXTENDED or abs(p_b - p_y) > P_EXTENDED)
-        and (abs(p_b - p_m_x) > M_X_EXTENDED
-             or abs(p_b - p_m_y) > M_Y_EXTENDED)
-    )
-    t = (
-        (abs(t_b - t_x) > T_EXTENDED or abs(t_b - t_y) > T_EXTENDED)
-        and (abs(t_b - t_m_x) > M_X_EXTENDED
-             or abs(t_b - t_m_y) > M_Y_EXTENDED)
-    )
-
-    one = i
-    two = one and m
-    three = two and r
-    four = three and p
-    five = four and t
-
-    #one = ((abs(i_b - i_x) > EXTENDED) and (abs(i_b - i_m_x) > M_X_EXTENDED)) or ((abs(i_b - i_y) > EXTENDED) and abs(i_b - i_m_y > M_Y_EXTENDED))
-
-    print(
-        "\n"
-        "Finger diagnostics:\n"
-        "Finger   Base Y       Tip X        Tip Y        Tip dX       Tip dY       Middle dX    Middle dY    Extended\n"
-        f"Thumb   {t_b: .8f}  {t_x: .8f}  {t_y: .8f}  {abs(t_b - t_x): .8f}  {abs(t_b - t_y): .8f}  {abs(t_b - t_m_x): .8f}  {abs(t_b - t_m_y): .8f}  {str(t):>8}\n"
-        f"Index   {i_b: .8f}  {i_x: .8f}  {i_y: .8f}  {abs(i_b - i_x): .8f}  {abs(i_b - i_y): .8f}  {abs(i_b - i_m_x): .8f}  {abs(i_b - i_m_y): .8f}  {str(i):>8}\n"
-        f"Middle  {m_b: .8f}  {m_x: .8f}  {m_y: .8f}  {abs(m_b - m_x): .8f}  {abs(m_b - m_y): .8f}  {abs(m_b - m_m_x): .8f}  {abs(m_b - m_m_y): .8f}  {str(m):>8}\n"
-        f"Ring    {r_b: .8f}  {r_x: .8f}  {r_y: .8f}  {abs(r_b - r_x): .8f}  {abs(r_b - r_y): .8f}  {abs(r_b - r_m_x): .8f}  {abs(r_b - r_m_y): .8f}  {str(r):>8}\n"
-        f"Pinky   {p_b: .8f}  {p_x: .8f}  {p_y: .8f}  {abs(p_b - p_x): .8f}  {abs(p_b - p_y): .8f}  {abs(p_b - p_m_x): .8f}  {abs(p_b - p_m_y): .8f}  {str(p):>8}\n"
-        f"\nChords: one={one}  two={two}  three={three}  four={four} five={five}\n"
-    )
-
-    if five:
-        return "five"
-    if four:
-        return "four"
-    if three:
-        return "three"
-    if two:
-        return "two"
-    if one:
-        return "one"
+    # Calculate distances from the palm to fingertips
+    d_I_to_C = s(I_T, I_B)
 
     return "No chord"
 
@@ -193,7 +133,7 @@ def draw_landmarks_on_image(rgb_image, detection_result):
     text_x = int(min(x_coordinates) * width)
     text_y = int(min(y_coordinates) * height) - MARGIN
 
-    hand_text = determine_chord(hand_world_landmarks)
+    hand_text = determine_chord(hand_landmarks, hand_world_landmarks, annotated_image)
 
     # Draw handedness (left or right hand) on the image.
     cv2.putText(annotated_image, hand_text,#f"{handedness[0].category_name}",
